@@ -4,24 +4,67 @@
 #include <cstdio>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
+#include <boost/program_options/errors.hpp>
+#include <boost/algorithm/string.hpp>
 
 namespace fs = boost::filesystem;
 namespace po = boost::program_options;
 using counter_t = std::array<uint64_t, 256>;
 constexpr auto DEFAULT_BLOCK_SIZE = 16 * 1024;
 
+// boost does not support enum classes with program_options, so use enum
+enum Format {
+    DATA = 1 << 8,  // All bytes are allowed, max entropy = 8
+    TEXT = 1 << 7,  // Only ASCII allowed, max entropy = 7
+    BASE64 = 1 << 6 // Only base64 characters allowed, max entropy = 6
+};
+
 double shannon_score(const counter_t& counts, std::size_t total_size,
-                     uint8_t low, uint8_t high) {
-    // TODO: Support high/low
+                     Format format) {
+    std::array<bool, 256> allowed{};
+    switch (format) {
+    case Format::DATA:
+        for (auto& value : allowed) {
+            value = true;
+        }
+        break;
+    case Format::TEXT:
+        for (uint8_t i = 0; i < 128; ++i) {
+            allowed[i] = true;
+        }
+        break;
+    case Format::BASE64:
+        for (uint8_t i = 'a'; i <= 'z'; ++i) {
+            allowed[i] = true;
+        }
+        for (uint8_t i = 'A'; i <= 'Z'; ++i) {
+            allowed[i] = true;
+        }
+        for (uint8_t i = '0'; i <= '9'; ++i) {
+            allowed[i] = true;
+        }
+        allowed['/'] = true;
+        allowed['+'] = true;
+        break;
+    }
+
     double score = 0;
     for (std::size_t index = 0; index < counts.size(); ++index) {
         auto count = counts[index];
-        if (count == 0)
+        if (count == 0 || !allowed[index])
             continue;
         double p_i = count / static_cast<double>(total_size);
         score += p_i * log2(p_i);
     }
-    return std::abs(score);
+
+    switch (format) {
+    case Format::DATA:
+        return std::abs(score) / 8.0;
+    case Format::TEXT:
+        return std::abs(score) / 7.0;
+    case Format::BASE64:
+        return std::abs(score) / 6.0;
+    }
 }
 
 template <typename Iter>
@@ -32,7 +75,7 @@ void shannon_digest(Iter begin, Iter end, counter_t& counts) {
 }
 
 void shannon_entire_file(const std::string& path,
-                         std::pair<double, double> bounds) {
+                         std::pair<double, double> bounds, Format format) {
     using block_t = std::array<uint8_t, DEFAULT_BLOCK_SIZE>;
     auto block = std::unique_ptr<block_t>(new block_t{});
     counter_t count{};
@@ -44,14 +87,14 @@ void shannon_entire_file(const std::string& path,
         shannon_digest(block->begin(), block->begin() + bytes_read, count);
     }
 
-    auto score = shannon_score(count, std::ftell(file), 0, 255);
+    auto score = shannon_score(count, std::ftell(file), format);
     if (score >= bounds.first && score <= bounds.second) {
         std::cout << path << ": " << score << std::endl;
     }
 }
 
 void shannon_file_blocks(const std::string& path, uint64_t block_size,
-                         std::pair<double, double> bounds) {
+                         std::pair<double, double> bounds, Format format) {
     uint64_t read_size;
     if (block_size < DEFAULT_BLOCK_SIZE) {
         read_size =
@@ -71,7 +114,7 @@ void shannon_file_blocks(const std::string& path, uint64_t block_size,
             counter_t counter{};
             shannon_digest(block.begin() + block_size * i,
                            block.begin() + block_size * (i + 1), counter);
-            auto score = shannon_score(counter, block_size, 0, 255);
+            auto score = shannon_score(counter, block_size, format);
             if (score >= bounds.first && score <= bounds.second) {
                 std::cout << path << ": " << std::hex
                           << start_file_offset + i * block_size << ": " << score
@@ -86,7 +129,7 @@ void shannon_file_blocks(const std::string& path, uint64_t block_size,
             counter_t counter{};
             shannon_digest(block.begin() + bytes_read - bytes_remaining,
                            block.begin() + bytes_read, counter);
-            auto score = shannon_score(counter, bytes_remaining, 0, 255);
+            auto score = shannon_score(counter, bytes_remaining, format);
             if (score >= bounds.first && score <= bounds.second) {
                 std::cout << path << ": " << std::hex
                           << start_file_offset + bytes_read - bytes_remaining
@@ -97,11 +140,12 @@ void shannon_file_blocks(const std::string& path, uint64_t block_size,
 }
 
 void shannon_file(const std::string& path, uint64_t block_size,
-                  bool print_blocks, std::pair<double, double> bounds) {
+                  bool print_blocks, std::pair<double, double> bounds,
+                  Format format) {
     if (!print_blocks) {
-        shannon_entire_file(path, bounds);
+        shannon_entire_file(path, bounds, format);
     } else {
-        shannon_file_blocks(path, block_size, bounds);
+        shannon_file_blocks(path, block_size, bounds, format);
     }
 }
 
@@ -137,12 +181,33 @@ uint64_t parse_block_size(const std::string& bs) {
     return num;
 }
 
+std::istream& operator>>(std::istream& in, Format& format) {
+    std::string token;
+    in >> token;
+    boost::algorithm::to_lower(token);
+    if (token == "data") {
+        format = Format::DATA;
+    } else if (token == "text") {
+        format = Format::TEXT;
+    } else if (token == "base64") {
+        format = Format::BASE64;
+    } else {
+        throw po::validation_error(po::validation_error::invalid_option,
+                                   "Unknown format");
+    }
+    return in;
+}
+
 int main(int argc, char** argv) {
     po::options_description desc("Usage: entrospy [OPTION] PATH...", 100);
 
+    Format format;
+    std::vector<std::string> paths;
+    std::pair<double, double> bounds;
+
     desc.add_options()                    //
         ("help,h", "Print help messages") //
-        ("paths", po::value<std::vector<std::string>>(),
+        ("paths", po::value<std::vector<std::string>>(&paths),
          "Paths to search")                  //
         ("debug", "Enable debugging output") //
         ("all,a",
@@ -153,11 +218,11 @@ int main(int argc, char** argv) {
          " argument will be interpreted as a byte count unless suffixed"
          " with 'K', 'M', or 'G' for kilo, mega, and giga-bytes "
          "respectively") //
-        ("lower,l",
+        ("lower,l", po::value<double>(&bounds.first),
          "Do not show files with entropy lower than 'lower'") //
-        ("upper,u",
+        ("upper,u", po::value<double>(&bounds.second),
          "Do not show files with entropy higher than 'upper'") //
-        ("format,f", po::value<std::string>()->default_value("data"),
+        ("format,f", po::value<Format>(&format)->default_value(Format::DATA),
          "Input format: 'data','text' or 'base64'")             //
         ("recursive,r", "Run directories in PATH recursively"); //
 
@@ -182,15 +247,11 @@ int main(int argc, char** argv) {
         // take up too much space in the help menu (and aren't really
         // meaningful defaults)
         if (!vm.count("lower")) {
-            auto default_lower =
-                po::variable_value(std::numeric_limits<double>::lowest(), true);
-            vm.insert(std::make_pair("lower", default_lower));
+            bounds.first = std::numeric_limits<double>::lowest();
         }
 
         if (!vm.count("upper")) {
-            auto default_upper =
-                po::variable_value(std::numeric_limits<double>::max(), true);
-            vm.insert(std::make_pair("upper", default_upper));
+            bounds.second = std::numeric_limits<double>::max();
         }
 
         po::notify(vm);
@@ -205,9 +266,6 @@ int main(int argc, char** argv) {
         print_blocks = true;
         block_size = parse_block_size(vm["block"].as<std::string>());
     }
-    auto bounds =
-        std::make_pair(vm["lower"].as<double>(), vm["upper"].as<double>());
-    auto paths = vm["paths"].as<std::vector<std::string>>();
 
     for (const auto& path : paths) {
         if (fs::is_directory(path)) {
@@ -226,12 +284,12 @@ int main(int argc, char** argv) {
                     }
                     if (!is_hidden(iter->path()) || vm.count("all")) {
                         shannon_file(iter->path().string(), block_size,
-                                     print_blocks, bounds);
+                                     print_blocks, bounds, format);
                     }
                 }
             }
         } else {
-            shannon_file(path, block_size, print_blocks, bounds);
+            shannon_file(path, block_size, print_blocks, bounds, format);
         }
     }
 }
