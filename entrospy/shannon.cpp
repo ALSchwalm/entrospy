@@ -44,6 +44,8 @@ double shannon_score(const counter_t& counts, std::size_t total_size,
     case Format::BASE64:
         allowed = &ALLOWED_BASE64;
         break;
+    default:
+        throw std::runtime_error("Unknown format");
     }
 
     double score = 0;
