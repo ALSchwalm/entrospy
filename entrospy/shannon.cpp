@@ -1,8 +1,11 @@
 #include <iostream>
 #include <boost/filesystem.hpp>
+#include <boost/preprocessor/repetition/enum.hpp>
 
 #include "shannon.hpp"
 #include "output.hpp"
+
+#define SHANNON_IDENT(z, n, value) value
 
 template <uint8_t Base>
 constexpr double log(double value) {
@@ -12,41 +15,41 @@ constexpr double log(double value) {
 namespace fs = boost::filesystem;
 
 using counter_t = std::array<uint64_t, 256>;
+using allowed_t = std::array<bool, 256>;
 constexpr auto DEFAULT_BLOCK_SIZE = 16 * 1024;
+
+constexpr allowed_t ALLOWED_DATA{BOOST_PP_ENUM(256, SHANNON_IDENT, true)};
+constexpr allowed_t ALLOWED_TEXT{BOOST_PP_ENUM(128, SHANNON_IDENT, true)};
+constexpr allowed_t ALLOWED_BASE64{
+    BOOST_PP_ENUM(43, SHANNON_IDENT, false),
+    true, // '+'
+    BOOST_PP_ENUM(3, SHANNON_IDENT, false),
+    BOOST_PP_ENUM(11, SHANNON_IDENT, true), // '/' and 0-9
+    BOOST_PP_ENUM(7, SHANNON_IDENT, false),
+    BOOST_PP_ENUM(26, SHANNON_IDENT, true), // A-Z
+    BOOST_PP_ENUM(6, SHANNON_IDENT, false),
+    BOOST_PP_ENUM(26, SHANNON_IDENT, true), // a-z
+};
 
 double shannon_score(const counter_t& counts, std::size_t total_size,
                      Format format) {
-    std::array<bool, 256> allowed{};
+    const allowed_t* allowed;
     switch (format) {
     case Format::DATA:
-        for (auto& value : allowed) {
-            value = true;
-        }
+        allowed = &ALLOWED_DATA;
         break;
     case Format::TEXT:
-        for (uint8_t i = 0; i < 128; ++i) {
-            allowed[i] = true;
-        }
+        allowed = &ALLOWED_TEXT;
         break;
     case Format::BASE64:
-        for (uint8_t i = 'a'; i <= 'z'; ++i) {
-            allowed[i] = true;
-        }
-        for (uint8_t i = 'A'; i <= 'Z'; ++i) {
-            allowed[i] = true;
-        }
-        for (uint8_t i = '0'; i <= '9'; ++i) {
-            allowed[i] = true;
-        }
-        allowed['/'] = true;
-        allowed['+'] = true;
+        allowed = &ALLOWED_BASE64;
         break;
     }
 
     double score = 0;
     for (std::size_t index = 0; index < counts.size(); ++index) {
         auto count = counts[index];
-        if (count == 0 || !allowed[index])
+        if (count == 0 || !(*allowed)[index])
             continue;
         double p_i = count / static_cast<double>(total_size);
         score += p_i * log2(p_i);
@@ -59,6 +62,8 @@ double shannon_score(const counter_t& counts, std::size_t total_size,
         return std::abs(score) / 7.0;
     case Format::BASE64:
         return std::abs(score) / 6.0;
+    default:
+        throw std::runtime_error("Unknown format");
     }
 }
 
