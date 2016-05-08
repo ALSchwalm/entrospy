@@ -67,7 +67,8 @@ int main(int argc, char** argv) {
          "Do not show files with entropy lower than 'lower'") //
         ("upper,u", po::value<double>(&bounds.second),
          "Do not show files with entropy higher than 'upper'") //
-        ("format,f", po::value<Format>(&format)->default_value(Format::DATA),
+        ("format,f",
+         po::value<Format>(&format)->default_value(Format::DATA, "data"),
          "Input format: 'data','text' or 'base64'")             //
         ("recursive,r", "Run directories in PATH recursively"); //
 
