@@ -5,7 +5,7 @@
 #include <boost/program_options.hpp>
 
 // boost does not support enum classes with program_options, so use enum
-enum Format {
+enum class Format {
     DATA = 1 << 8,  // All bytes are allowed, max entropy = 8
     TEXT = 1 << 7,  // Only ASCII allowed, max entropy = 7
     BASE64 = 1 << 6 // Only base64 characters allowed, max entropy = 6

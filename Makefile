@@ -12,13 +12,13 @@ MKDIR_P = mkdir -p
 all: directories entrospy
 
 directories:
-	mkdir build
+	mkdir -p build
 
 entrospy: $(OBJ_FILES)
-	$(CXX) $(OBJ_FILES) -std=c++11 $(LD_FLAGS) -o build/entrospy
+	$(CXX) $(OBJ_FILES) -O3 -std=c++11 $(LD_FLAGS) -o build/entrospy
 
 entrospy/%.o: entrospy/%.cpp
-	$(CXX) $(CC_FLAGS) -c -o $@ $< -Ientrospy/include -std=c++11 -Wall -Wextra
+	$(CXX) $(CC_FLAGS) -O3 -c -o $@ $< -Ientrospy/include -std=c++11 -Wall -Wextra
 
 clean:
 	rm -r build $(OBJ_FILES)

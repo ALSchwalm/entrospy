@@ -33,7 +33,7 @@ constexpr allowed_t ALLOWED_BASE64{
 
 double shannon_score(const counter_t& counts, std::size_t total_size,
                      Format format) {
-    const allowed_t* allowed;
+    const allowed_t* allowed = nullptr;
     switch (format) {
     case Format::DATA:
         allowed = &ALLOWED_DATA;
@@ -44,8 +44,6 @@ double shannon_score(const counter_t& counts, std::size_t total_size,
     case Format::BASE64:
         allowed = &ALLOWED_BASE64;
         break;
-    default:
-        throw std::runtime_error("Unknown format");
     }
 
     double score = 0;
@@ -64,9 +62,8 @@ double shannon_score(const counter_t& counts, std::size_t total_size,
         return std::abs(score) / 7.0;
     case Format::BASE64:
         return std::abs(score) / 6.0;
-    default:
-        throw std::runtime_error("Unknown format");
     }
+    return 0.0;
 }
 
 template <typename Iter>
@@ -150,12 +147,71 @@ void shannon_file_blocks(const std::string& path, uint64_t block_size,
     }
 }
 
+class shannon_iterator
+    : public boost::iterator_facade<shannon_iterator, double,
+                                    boost::forward_traversal_tag, double> {
+private:
+    uint64_t m_read_size = DEFAULT_BLOCK_SIZE;
+    uint64_t m_block_size;
+    uint64_t m_total_size;
+    std::vector<uint8_t> m_block;
+    counter_t m_counter;
+    FILE* m_file = nullptr;
+    Format m_format;
+
+public:
+    shannon_iterator() = default;
+    shannon_iterator(const std::string& path, uint64_t block_size,
+                     Format format)
+        : m_file{std::fopen(path.c_str(), "rb")},
+          m_total_size{fs::file_size(path)},
+          m_format{format},
+          m_block_size{block_size} {
+
+        if (block_size < DEFAULT_BLOCK_SIZE) {
+            m_read_size = std::ceil(DEFAULT_BLOCK_SIZE /
+                                    static_cast<double>(block_size)) *
+                          block_size;
+        } else {
+            m_read_size = DEFAULT_BLOCK_SIZE;
+        }
+
+        m_block.resize(m_read_size);
+    }
+    void increment() {
+        assert(m_block.size() >= m_block_size);
+        std::size_t bytes_read =
+            std::fread(&m_block.front(), 1, m_block_size, m_file);
+        m_counter.fill(0);
+
+        auto block_begin = m_block.begin();
+        auto block_end = m_block.begin() + m_block_size;
+        shannon_digest(block_begin, block_end, m_counter);
+    }
+
+    bool equal(shannon_iterator const& other) const {
+        return (m_file && std::feof(m_file) && other.m_file == nullptr) ||
+               (std::feof(m_file) && other.m_file && std::feof(other.m_file)) ||
+               (m_file == nullptr && other.m_file == nullptr);
+    }
+
+    double dereference() const {
+        return shannon_score(m_counter, m_block_size, m_format);
+    }
+};
+
 void shannon_file(const std::string& path, uint64_t block_size,
                   bool print_blocks, std::pair<double, double> bounds,
                   Format format) {
     if (!block_size) {
         shannon_entire_file(path, bounds, format);
     } else {
-        shannon_file_blocks(path, block_size, print_blocks, bounds, format);
+        auto shannon_range =
+            boost::make_iterator_range(shannon_iterator{path, block_size,
+                                                        format},
+                                       shannon_iterator{});
+        for (auto score : shannon_range) {
+            std::cout << path << ": score: " << score << std::endl;
+        }
     }
 }
