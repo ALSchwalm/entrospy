@@ -151,20 +151,18 @@ class shannon_iterator
     : public boost::iterator_facade<shannon_iterator, double,
                                     boost::forward_traversal_tag, double> {
 private:
-    uint64_t m_read_size = DEFAULT_BLOCK_SIZE;
-    uint64_t m_block_size;
-    uint64_t m_total_size;
-    std::vector<uint8_t> m_block;
-    counter_t m_counter;
     FILE* m_file = nullptr;
     Format m_format;
+    uint64_t m_block_size;
+    uint64_t m_read_size = DEFAULT_BLOCK_SIZE;
+    std::vector<uint8_t> m_block;
+    counter_t m_counter;
 
 public:
     shannon_iterator() = default;
     shannon_iterator(const std::string& path, uint64_t block_size,
                      Format format)
         : m_file{std::fopen(path.c_str(), "rb")},
-          m_total_size{fs::file_size(path)},
           m_format{format},
           m_block_size{block_size} {
 
@@ -173,20 +171,20 @@ public:
                                     static_cast<double>(block_size)) *
                           block_size;
         } else {
-            m_read_size = DEFAULT_BLOCK_SIZE;
+            m_read_size = block_size;
         }
 
         m_block.resize(m_read_size);
+        this->increment(); // Get meaningful data in the buffer
     }
     void increment() {
         assert(m_block.size() >= m_block_size);
         std::size_t bytes_read =
             std::fread(&m_block.front(), 1, m_block_size, m_file);
+        m_block.resize(bytes_read);
         m_counter.fill(0);
 
-        auto block_begin = m_block.begin();
-        auto block_end = m_block.begin() + m_block_size;
-        shannon_digest(block_begin, block_end, m_counter);
+        shannon_digest(m_block.begin(), m_block.end(), m_counter);
     }
 
     bool equal(shannon_iterator const& other) const {
@@ -198,6 +196,10 @@ public:
     double dereference() const {
         return shannon_score(m_counter, m_block_size, m_format);
     }
+
+    const std::vector<uint8_t>& block() const { return m_block; }
+    const FILE* file() const { return m_file; }
+    long position() { return std::ftell(m_file) - m_block_size; }
 };
 
 void shannon_file(const std::string& path, uint64_t block_size,
@@ -206,12 +208,20 @@ void shannon_file(const std::string& path, uint64_t block_size,
     if (!block_size) {
         shannon_entire_file(path, bounds, format);
     } else {
-        auto shannon_range =
-            boost::make_iterator_range(shannon_iterator{path, block_size,
-                                                        format},
-                                       shannon_iterator{});
-        for (auto score : shannon_range) {
-            std::cout << path << ": score: " << score << std::endl;
+        shannon_iterator iter{path, block_size, format};
+        shannon_iterator end{};
+        for (; iter != end; ++iter) {
+            auto score = *iter;
+
+            if (score < bounds.first || score > bounds.second) {
+                continue;
+            }
+
+            print_block_score(path, iter.position(), 8, score);
+            if (print_blocks) {
+                print_block_bytes(iter.block().begin(), iter.block().end(),
+                                  iter.position(), 8);
+            }
         }
     }
 }
