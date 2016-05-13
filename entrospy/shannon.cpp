@@ -123,8 +123,7 @@ public:
     }
 
     const std::vector<uint8_t>& block() const { return m_block; }
-    const FILE* file() const { return m_file; }
-    long position() { return std::ftell(m_file) - m_block_size; }
+    int64_t position() { return std::ftell(m_file) - m_block_size; }
 };
 
 void shannon_file(const std::string& path, uint64_t block_size,
@@ -144,7 +143,8 @@ void shannon_file(const std::string& path, uint64_t block_size,
     } else {
         shannon_iterator iter{path, block_size, format};
         shannon_iterator end{};
-        auto addr_width = log<16>(fs::file_size(path));
+        auto addr_width =
+            address_width(policy.addr_format, fs::file_size(path));
         for (; iter != end; ++iter) {
             auto score = *iter;
 
@@ -155,7 +155,7 @@ void shannon_file(const std::string& path, uint64_t block_size,
             print_score(path, iter.position(), addr_width, score, policy);
             if (policy.print_blocks) {
                 print_block_bytes(iter.block().begin(), iter.block().end(),
-                                  iter.position(), addr_width);
+                                  iter.position(), addr_width, policy);
             }
         }
     }

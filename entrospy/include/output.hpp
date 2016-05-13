@@ -6,6 +6,7 @@
 #include <boost/format.hpp>
 
 enum class AddressFormat { DECIMAL, HEX };
+std::istream& operator>>(std::istream& in, AddressFormat& format);
 
 struct PrintingPolicy {
     bool print_blocks = false;
@@ -14,17 +15,34 @@ struct PrintingPolicy {
     AddressFormat addr_format = AddressFormat::DECIMAL;
 };
 
-char byte_to_printable(uint8_t);
+uint8_t address_width(AddressFormat format, uint64_t address);
+
+inline auto address_format_modifier(AddressFormat format)
+    -> decltype(&std::hex) {
+    switch (format) {
+    case AddressFormat::DECIMAL:
+        return std::dec;
+    case AddressFormat::HEX:
+        return std::hex;
+    }
+    assert(false && "Unknown address format");
+}
+
+inline char byte_to_printable(uint8_t byte) {
+    return (byte > 0x1f && byte < 0x7f) ? byte : '.';
+}
 
 template <typename Iter>
 void print_block_bytes(Iter begin, Iter end, uint64_t offset,
-                       uint64_t address_width) {
+                       uint64_t address_width, const PrintingPolicy& policy) {
     const auto BYTES_PER_LINE = 16;
     auto iter = begin;
     for (auto i = 0; i < std::distance(begin, end) / BYTES_PER_LINE; ++i) {
         auto address = offset + BYTES_PER_LINE * i;
         std::cout << boost::format("%1%  ") %
-                         boost::io::group(std::hex, std::setw(address_width),
+                         boost::io::group(address_format_modifier(
+                                              policy.addr_format),
+                                          std::setw(address_width),
                                           std::setfill('0'), address);
 
         auto byte_iter = iter;

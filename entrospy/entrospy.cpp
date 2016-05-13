@@ -63,6 +63,9 @@ int main(int argc, char** argv) {
          " with 'K', 'M', or 'G' for kilo, mega, and giga-bytes "
          "respectively")                              //
         ("print,p", "Print a hex view of each block") //
+        ("addr", po::value<AddressFormat>(&policy.addr_format)
+                     ->default_value(AddressFormat::HEX, "hex"),
+         "Format to use for printed addresses: 'hex' or 'dec'") //
         ("lower,l", po::value<double>(&policy.bounds.first),
          "Do not show files with entropy lower than 'lower'") //
         ("upper,u", po::value<double>(&policy.bounds.second),
