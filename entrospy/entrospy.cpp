@@ -45,9 +45,9 @@ uint64_t parse_block_size(const std::string& bs) {
 int main(int argc, char** argv) {
     po::options_description desc("Usage: entrospy [OPTION] PATH...", 100);
 
-    Format format;
+    PrintingPolicy policy;
+    DataFormat format;
     std::vector<std::string> paths;
-    std::pair<double, double> bounds;
 
     desc.add_options()                    //
         ("help,h", "Print help messages") //
@@ -63,12 +63,12 @@ int main(int argc, char** argv) {
          " with 'K', 'M', or 'G' for kilo, mega, and giga-bytes "
          "respectively")                              //
         ("print,p", "Print a hex view of each block") //
-        ("lower,l", po::value<double>(&bounds.first),
+        ("lower,l", po::value<double>(&policy.bounds.first),
          "Do not show files with entropy lower than 'lower'") //
-        ("upper,u", po::value<double>(&bounds.second),
+        ("upper,u", po::value<double>(&policy.bounds.second),
          "Do not show files with entropy higher than 'upper'") //
-        ("format,f",
-         po::value<Format>(&format)->default_value(Format::DATA, "data"),
+        ("format,f", po::value<DataFormat>(&format)
+                         ->default_value(DataFormat::DATA, "data"),
          "Input format: 'data','text' or 'base64'")             //
         ("recursive,r", "Run directories in PATH recursively"); //
 
@@ -89,17 +89,6 @@ int main(int argc, char** argv) {
             return 0;
         }
 
-        // Do not use program_options default arguments because they
-        // take up too much space in the help menu (and aren't really
-        // meaningful defaults)
-        if (!vm.count("lower")) {
-            bounds.first = std::numeric_limits<double>::lowest();
-        }
-
-        if (!vm.count("upper")) {
-            bounds.second = std::numeric_limits<double>::max();
-        }
-
         po::notify(vm);
     } catch (po::error& e) {
         std::cerr << "entrospy: " << e.what() << std::endl;
@@ -111,14 +100,13 @@ int main(int argc, char** argv) {
         block_size = parse_block_size(vm["block"].as<std::string>());
     }
 
-    bool print_blocks = false;
     if (vm.count("print")) {
         if (!vm.count("block")) {
             std::cerr << "entrospy: cannot specify 'print' without 'block'"
                       << std::endl;
             return EXIT_FAILURE;
         } else {
-            print_blocks = true;
+            policy.print_blocks = true;
         }
     }
 
@@ -138,13 +126,13 @@ int main(int argc, char** argv) {
                         continue;
                     }
                     if (!is_hidden(iter->path()) || vm.count("all")) {
-                        shannon_file(iter->path().string(), block_size,
-                                     print_blocks, bounds, format);
+                        shannon_file(iter->path().string(), block_size, policy,
+                                     format);
                     }
                 }
             }
         } else {
-            shannon_file(path, block_size, print_blocks, bounds, format);
+            shannon_file(path, block_size, policy, format);
         }
     }
 }

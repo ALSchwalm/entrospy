@@ -5,6 +5,15 @@
 #include <iomanip>
 #include <boost/format.hpp>
 
+enum class AddressFormat { DECIMAL, HEX };
+
+struct PrintingPolicy {
+    bool print_blocks = false;
+    std::pair<double, double> bounds = {std::numeric_limits<double>::lowest(),
+                                        std::numeric_limits<double>::max()};
+    AddressFormat addr_format = AddressFormat::DECIMAL;
+};
+
 char byte_to_printable(uint8_t);
 
 template <typename Iter>
@@ -53,7 +62,11 @@ void print_block_bytes(Iter begin, Iter end, uint64_t offset,
     }
 }
 
-void print_block_score(const std::string& path, uint64_t address,
-                       uint64_t address_width, double score);
+void print_score(const std::string& path, uint64_t address,
+                 uint64_t address_width, double score,
+                 const PrintingPolicy& policy);
+
+void print_score(const std::string& path, double score,
+                 const PrintingPolicy& policy);
 
 #endif

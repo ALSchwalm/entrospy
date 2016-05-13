@@ -32,16 +32,16 @@ constexpr allowed_t ALLOWED_BASE64{
 };
 
 double shannon_score(const counter_t& counts, std::size_t total_size,
-                     Format format) {
+                     DataFormat format) {
     const allowed_t* allowed = nullptr;
     switch (format) {
-    case Format::DATA:
+    case DataFormat::DATA:
         allowed = &ALLOWED_DATA;
         break;
-    case Format::TEXT:
+    case DataFormat::TEXT:
         allowed = &ALLOWED_TEXT;
         break;
-    case Format::BASE64:
+    case DataFormat::BASE64:
         allowed = &ALLOWED_BASE64;
         break;
     }
@@ -56,11 +56,11 @@ double shannon_score(const counter_t& counts, std::size_t total_size,
     }
 
     switch (format) {
-    case Format::DATA:
+    case DataFormat::DATA:
         return std::abs(score) / 8.0;
-    case Format::TEXT:
+    case DataFormat::TEXT:
         return std::abs(score) / 7.0;
-    case Format::BASE64:
+    case DataFormat::BASE64:
         return std::abs(score) / 6.0;
     }
     return 0.0;
@@ -73,108 +73,27 @@ void shannon_digest(Iter begin, Iter end, counter_t& counts) {
     }
 }
 
-void shannon_entire_file(const std::string& path,
-                         std::pair<double, double> bounds, Format format) {
-    using block_t = std::array<uint8_t, DEFAULT_BLOCK_SIZE>;
-    auto block = std::unique_ptr<block_t>(new block_t{});
-    counter_t count{};
-    auto file = std::fopen(path.c_str(), "rb");
-
-    while (!std::feof(file)) {
-        std::size_t bytes_read =
-            std::fread(block->begin(), 1, block->size(), file);
-        shannon_digest(block->begin(), block->begin() + bytes_read, count);
-    }
-
-    auto score = shannon_score(count, std::ftell(file), format);
-    if (score >= bounds.first && score <= bounds.second) {
-        std::cout << path << ": score: " << score << std::endl;
-    }
-}
-
-void shannon_file_blocks(const std::string& path, uint64_t block_size,
-                         bool print_block, std::pair<double, double> bounds,
-                         Format format) {
-    uint64_t read_size;
-    if (block_size < DEFAULT_BLOCK_SIZE) {
-        read_size =
-            std::ceil(DEFAULT_BLOCK_SIZE / static_cast<double>(block_size)) *
-            block_size;
-    } else {
-        read_size = block_size;
-    }
-
-    std::vector<uint8_t> block(read_size);
-    auto file = std::fopen(path.c_str(), "rb");
-    auto filesize = fs::file_size(path);
-    auto address_width = std::ceil(log<16>(filesize));
-
-    while (!std::feof(file)) {
-        auto start_file_offset = std::ftell(file);
-        std::size_t bytes_read = std::fread(&block.front(), 1, read_size, file);
-        for (std::size_t i = 0; i < bytes_read / block_size; ++i) {
-            counter_t counter{};
-            auto block_begin = block.begin() + block_size * i;
-            auto block_end = block.begin() + block_size * (i + 1);
-            shannon_digest(block_begin, block_end, counter);
-            auto score = shannon_score(counter, block_size, format);
-
-            if (score >= bounds.first && score <= bounds.second) {
-                print_block_score(path, start_file_offset + i * block_size,
-                                  address_width, score);
-                if (print_block) {
-                    print_block_bytes(block_begin, block_end,
-                                      start_file_offset + i * block_size,
-                                      address_width);
-                }
-            }
-        }
-
-        // At the end of the file, handle the part of the final block
-        // TODO: skip this? It may have inflated entropy
-        if (bytes_read < read_size && bytes_read % block_size != 0) {
-            auto bytes_remaining = bytes_read % block_size;
-            counter_t counter{};
-            shannon_digest(block.begin() + bytes_read - bytes_remaining,
-                           block.begin() + bytes_read, counter);
-            auto score = shannon_score(counter, bytes_remaining, format);
-            if (score >= bounds.first && score <= bounds.second) {
-                print_block_score(path, start_file_offset + bytes_read -
-                                            bytes_remaining,
-                                  address_width, score);
-            }
-        }
-    }
-}
-
 class shannon_iterator
     : public boost::iterator_facade<shannon_iterator, double,
                                     boost::forward_traversal_tag, double> {
 private:
     FILE* m_file = nullptr;
-    Format m_format;
+    DataFormat m_format;
     uint64_t m_block_size;
-    uint64_t m_read_size = DEFAULT_BLOCK_SIZE;
     std::vector<uint8_t> m_block;
+    bool m_clear_stats;
     counter_t m_counter;
 
 public:
     shannon_iterator() = default;
     shannon_iterator(const std::string& path, uint64_t block_size,
-                     Format format)
+                     DataFormat format, bool clear_stats = true)
         : m_file{std::fopen(path.c_str(), "rb")},
           m_format{format},
-          m_block_size{block_size} {
-
-        if (block_size < DEFAULT_BLOCK_SIZE) {
-            m_read_size = std::ceil(DEFAULT_BLOCK_SIZE /
-                                    static_cast<double>(block_size)) *
-                          block_size;
-        } else {
-            m_read_size = block_size;
-        }
-
-        m_block.resize(m_read_size);
+          m_block_size{block_size},
+          m_block(block_size),
+          m_clear_stats{clear_stats},
+          m_counter{} {
         this->increment(); // Get meaningful data in the buffer
     }
     void increment() {
@@ -182,8 +101,10 @@ public:
         std::size_t bytes_read =
             std::fread(&m_block.front(), 1, m_block_size, m_file);
         m_block.resize(bytes_read);
-        m_counter.fill(0);
 
+        if (m_clear_stats) {
+            m_counter.fill(0);
+        }
         shannon_digest(m_block.begin(), m_block.end(), m_counter);
     }
 
@@ -194,7 +115,11 @@ public:
     }
 
     double dereference() const {
-        return shannon_score(m_counter, m_block_size, m_format);
+        if (m_clear_stats) {
+            return shannon_score(m_counter, m_block_size, m_format);
+        } else {
+            return shannon_score(m_counter, std::ftell(m_file), m_format);
+        }
     }
 
     const std::vector<uint8_t>& block() const { return m_block; }
@@ -203,24 +128,34 @@ public:
 };
 
 void shannon_file(const std::string& path, uint64_t block_size,
-                  bool print_blocks, std::pair<double, double> bounds,
-                  Format format) {
+                  const PrintingPolicy& policy, DataFormat format) {
     if (!block_size) {
-        shannon_entire_file(path, bounds, format);
+        shannon_iterator iter{path, DEFAULT_BLOCK_SIZE, format, false};
+        shannon_iterator end{};
+        for (; iter != end; ++iter) {
+        }
+        auto score = *iter;
+
+        if (score < policy.bounds.first || score > policy.bounds.second) {
+            return;
+        }
+
+        print_score(path, score, policy);
     } else {
         shannon_iterator iter{path, block_size, format};
         shannon_iterator end{};
+        auto addr_width = log<16>(fs::file_size(path));
         for (; iter != end; ++iter) {
             auto score = *iter;
 
-            if (score < bounds.first || score > bounds.second) {
+            if (score < policy.bounds.first || score > policy.bounds.second) {
                 continue;
             }
 
-            print_block_score(path, iter.position(), 8, score);
-            if (print_blocks) {
+            print_score(path, iter.position(), addr_width, score, policy);
+            if (policy.print_blocks) {
                 print_block_bytes(iter.block().begin(), iter.block().end(),
-                                  iter.position(), 8);
+                                  iter.position(), addr_width);
             }
         }
     }
