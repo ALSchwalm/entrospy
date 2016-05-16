@@ -76,8 +76,7 @@ void shannon_digest(Iter begin, Iter end, counter_t& counts) {
 class shannon_iterator
     : public boost::iterator_facade<shannon_iterator, double,
                                     boost::forward_traversal_tag, double> {
-private:
-    FILE* m_file = nullptr;
+    std::istream* m_stream = nullptr;
     DataFormat m_format;
     uint64_t m_block_size;
     std::vector<uint8_t> m_block;
@@ -86,9 +85,9 @@ private:
 
 public:
     shannon_iterator() = default;
-    shannon_iterator(const std::string& path, uint64_t block_size,
+    shannon_iterator(std::ifstream& stream, uint64_t block_size,
                      DataFormat format, bool clear_stats = true)
-        : m_file{std::fopen(path.c_str(), "rb")},
+        : m_stream{&stream},
           m_format{format},
           m_block_size{block_size},
           m_block(block_size),
@@ -97,39 +96,54 @@ public:
         this->increment(); // Get meaningful data in the buffer
     }
     void increment() {
-        assert(m_block.size() >= m_block_size);
-        std::size_t bytes_read =
-            std::fread(&m_block.front(), 1, m_block_size, m_file);
-        m_block.resize(bytes_read);
+        assert(m_block.capacity() >= m_block_size);
 
-        if (m_clear_stats) {
-            m_counter.fill(0);
+        if (m_stream != nullptr) {
+            m_stream->read(reinterpret_cast<char*>(&m_block.front()),
+                           m_block_size);
+            std::streamsize bytes_read = m_stream->gcount();
+            m_block.resize(bytes_read);
+
+            if (m_clear_stats) {
+                m_counter.fill(0);
+            }
+            shannon_digest(m_block.begin(), m_block.end(), m_counter);
         }
-        shannon_digest(m_block.begin(), m_block.end(), m_counter);
     }
 
     bool equal(shannon_iterator const& other) const {
-        return (m_file && std::feof(m_file) && other.m_file == nullptr) ||
-               (std::feof(m_file) && other.m_file && std::feof(other.m_file)) ||
-               (m_file == nullptr && other.m_file == nullptr);
+        return m_stream == other.m_stream ||
+               (!other.m_stream && m_stream && !*m_stream);
     }
 
     double dereference() const {
+        assert(m_stream != nullptr);
+
         if (m_clear_stats) {
             return shannon_score(m_counter, m_block_size, m_format);
         } else {
-            return shannon_score(m_counter, std::ftell(m_file), m_format);
+            // If we have reached eof, seek to end and clear so we can
+            // use tellg to get the total bytes read
+            if (m_stream->fail()) {
+                m_stream->seekg(0, std::ios_base::end);
+                m_stream->clear();
+            }
+            auto bytes_read = m_stream->tellg();
+            return shannon_score(m_counter, bytes_read, m_format);
         }
     }
 
     const std::vector<uint8_t>& block() const { return m_block; }
-    int64_t position() { return std::ftell(m_file) - m_block_size; }
+    std::streampos position() {
+        return m_stream->tellg() - std::streamoff(m_block_size);
+    }
 };
 
 void shannon_file(const std::string& path, uint64_t block_size,
                   const PrintingPolicy& policy, DataFormat format) {
+    std::ifstream file_stream{path, std::ifstream::binary};
     if (!block_size) {
-        shannon_iterator iter{path, DEFAULT_BLOCK_SIZE, format, false};
+        shannon_iterator iter{file_stream, DEFAULT_BLOCK_SIZE, format, false};
         shannon_iterator end{};
         for (; iter != end; ++iter) {
         }
@@ -141,7 +155,7 @@ void shannon_file(const std::string& path, uint64_t block_size,
 
         print_score(path, score, policy);
     } else {
-        shannon_iterator iter{path, block_size, format};
+        shannon_iterator iter{file_stream, block_size, format};
         shannon_iterator end{};
         auto addr_width =
             address_width(policy.addr_format, fs::file_size(path));

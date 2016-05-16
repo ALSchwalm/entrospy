@@ -63,8 +63,11 @@ void print_block_bytes(Iter begin, Iter end, uint64_t offset,
     if (iter != end) {
         auto byte_iter = iter;
         auto printed = end - begin - (end - iter);
+
         std::cout << boost::format("%1%  ") %
-                         boost::io::group(std::hex, std::setw(address_width),
+                         boost::io::group(address_format_modifier(
+                                              policy.addr_format),
+                                          std::setw(address_width),
                                           std::setfill('0'), offset + printed);
         for (; byte_iter != end; ++byte_iter) {
             std::cout << boost::format("%02x ") %
