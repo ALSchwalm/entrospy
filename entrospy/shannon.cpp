@@ -157,8 +157,11 @@ void shannon_file(const std::string& path, uint64_t block_size,
     } else {
         shannon_iterator iter{file_stream, block_size, format};
         shannon_iterator end{};
-        auto addr_width =
-            address_width(policy.addr_format, fs::file_size(path));
+        auto file_size = fs::file_size(path);
+        auto addr_width = address_width(policy.addr_format, file_size);
+        if (policy.print_graph) {
+            print_graph_header(path, block_size, file_size, policy);
+        }
         for (; iter != end; ++iter) {
             auto score = *iter;
 
@@ -166,11 +169,18 @@ void shannon_file(const std::string& path, uint64_t block_size,
                 continue;
             }
 
+            if (policy.print_graph) {
+                print_graph_score(iter.position(), score, policy);
+                continue;
+            }
             print_score(path, iter.position(), addr_width, score, policy);
             if (policy.print_blocks) {
                 print_block_bytes(iter.block().begin(), iter.block().end(),
                                   iter.position(), addr_width, policy);
             }
+        }
+        if (policy.print_graph) {
+            print_graph_finalize(policy);
         }
     }
 }

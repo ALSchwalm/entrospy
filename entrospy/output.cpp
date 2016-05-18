@@ -1,5 +1,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/program_options.hpp>
+#include <boost/filesystem.hpp>
 
 #include "output.hpp"
 
@@ -43,4 +44,36 @@ void print_score(const std::string& path, uint64_t address,
 
 void print_score(const std::string& path, double score, const PrintingPolicy&) {
     std::cout << path << ": score: " << score << "\n";
+}
+
+void print_graph_header(const std::string& path, uint64_t block_size,
+                        uint64_t file_size, const PrintingPolicy& policy) {
+
+    auto input_file = boost::filesystem::path(path).stem().string();
+    auto output_file = input_file + "_entropy.png";
+    auto title = input_file + " Entropy";
+    boost::replace_all(title, "_", "\\_");
+
+    std::cout << boost::format("set term pngcairo size 1024, 768\n"
+                               "set output '%1%'\n"
+                               "set title '%2% (block size=%3%)'\n"
+                               "set grid\n"
+                               "set xlabel 'address'\n"
+                               "set ylabel 'entropy'\n"
+                               "set xtics rotate by -30\n"
+                               "set format x '%%.0f'\n"
+                               "set style line 1 lc rgb '#A0A0A0' lt 0 lw 2\n"
+                               "set grid back ls 1\n"
+                               "plot [0:%4%] [0:1] '-' title ''"
+                               "  with points lc rgb '#0000BB' pt 6 ps 0.8\n") %
+                     output_file % title % block_size % file_size;
+}
+
+void print_graph_score(std::streampos position, double score,
+                       const PrintingPolicy&) {
+    std::cout << position << " " << score << std::endl;
+}
+
+void print_graph_finalize(const PrintingPolicy& policy) {
+    std::cout << "quit" << std::endl;
 }

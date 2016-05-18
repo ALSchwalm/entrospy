@@ -72,8 +72,11 @@ int main(int argc, char** argv) {
          "Do not show files with entropy higher than 'upper'") //
         ("format,f", po::value<DataFormat>(&format)
                          ->default_value(DataFormat::DATA, "data"),
-         "Input format: 'data','text' or 'base64'")             //
-        ("recursive,r", "Run directories in PATH recursively"); //
+         "Input format: 'data','text' or 'base64'") //
+        ("graph,g",
+         "Output a gnuplot script file") //
+        ("recursive,r",
+         "Run directories in PATH recursively"); //
 
     po::positional_options_description p;
     p.add("paths", -1);
@@ -111,6 +114,10 @@ int main(int argc, char** argv) {
         } else {
             policy.print_blocks = true;
         }
+    }
+
+    if (vm.count("graph")) {
+        policy.print_graph = true;
     }
 
     for (const auto& path : paths) {

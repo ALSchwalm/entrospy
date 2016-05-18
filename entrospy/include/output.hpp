@@ -10,6 +10,7 @@ std::istream& operator>>(std::istream& in, AddressFormat& format);
 
 struct PrintingPolicy {
     bool print_blocks = false;
+    bool print_graph = false;
     std::pair<double, double> bounds = {std::numeric_limits<double>::lowest(),
                                         std::numeric_limits<double>::max()};
     AddressFormat addr_format = AddressFormat::DECIMAL;
@@ -90,4 +91,9 @@ void print_score(const std::string& path, uint64_t address,
 void print_score(const std::string& path, double score,
                  const PrintingPolicy& policy);
 
+void print_graph_header(const std::string& path, uint64_t block_size,
+                        uint64_t file_size, const PrintingPolicy& policy);
+void print_graph_score(std::streampos position, double score,
+                       const PrintingPolicy& policy);
+void print_graph_finalize(const PrintingPolicy& policy);
 #endif
