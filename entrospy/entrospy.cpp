@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
     auto title = boost::format("Entropy for %1% (bs=%2%)") %
                  boost::algorithm::join(paths, ", ") % block_size;
 
-    EntropyGraph graph{boost::str(title), "output", block_size, policy};
+    EntropyGraph graph{boost::str(title), block_size, policy};
     for (const auto& path : paths) {
         if (fs::is_directory(path)) {
             if (!vm.count("recursive")) {

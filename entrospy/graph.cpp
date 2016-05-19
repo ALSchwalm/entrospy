@@ -3,13 +3,9 @@
 
 #include "graph.hpp"
 
-EntropyGraph::EntropyGraph(const std::string& title, const std::string& output,
-                           uint64_t block_size, const PrintingPolicy& policy)
-    : m_title{title},
-      m_output{output},
-      m_block_size{block_size},
-      m_policy{policy},
-      m_scores{} {}
+EntropyGraph::EntropyGraph(const std::string& title, uint64_t block_size,
+                           const PrintingPolicy& policy)
+    : m_title{title}, m_block_size{block_size}, m_policy{policy}, m_scores{} {}
 
 void EntropyGraph::insert(const std::string& path, std::streampos position,
                           double score) {
@@ -18,8 +14,7 @@ void EntropyGraph::insert(const std::string& path, std::streampos position,
 
 std::ostream& operator<<(std::ostream& out, const EntropyGraph& graph) {
     out << boost::format("set term qt noenhanced size 1024, 768\n"
-                         "set output '%1%'\n"
-                         "set title '%2%'\n"
+                         "set title '%1%'\n"
                          "set grid\n"
                          "set xlabel 'address'\n"
                          "set ylabel 'entropy'\n"
@@ -27,7 +22,7 @@ std::ostream& operator<<(std::ostream& out, const EntropyGraph& graph) {
                          "set format x '%%.0f'\n"
                          "set style line 1 lc rgb '#A0A0A0' lt 0 lw 2\n"
                          "set grid back ls 1\n") %
-               graph.m_output % graph.m_title;
+               graph.m_title;
 
     std::vector<std::string> points_cfg;
     uint64_t max_file_size = 0;
