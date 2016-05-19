@@ -6,6 +6,7 @@
 
 #include "shannon.hpp"
 #include "output.hpp"
+#include "graph.hpp"
 
 namespace fs = boost::filesystem;
 namespace po = boost::program_options;
@@ -74,7 +75,7 @@ int main(int argc, char** argv) {
                          ->default_value(DataFormat::DATA, "data"),
          "Input format: 'data','text' or 'base64'") //
         ("graph,g",
-         "Output a gnuplot script file") //
+         "Output a gnuplot script to standard out") //
         ("recursive,r",
          "Run directories in PATH recursively"); //
 
@@ -120,6 +121,10 @@ int main(int argc, char** argv) {
         policy.print_graph = true;
     }
 
+    auto title = boost::format("Entropy for %1% (bs=%2%)") %
+                 boost::algorithm::join(paths, ", ") % block_size;
+
+    EntropyGraph graph{boost::str(title), "output", block_size, policy};
     for (const auto& path : paths) {
         if (fs::is_directory(path)) {
             if (!vm.count("recursive")) {
@@ -137,12 +142,16 @@ int main(int argc, char** argv) {
                     }
                     if (!is_hidden(iter->path()) || vm.count("all")) {
                         shannon_file(iter->path().string(), block_size, policy,
-                                     format);
+                                     format, graph);
                     }
                 }
             }
         } else {
-            shannon_file(path, block_size, policy, format);
+            shannon_file(path, block_size, policy, format, graph);
         }
+    }
+
+    if (policy.print_graph) {
+        std::cout << graph;
     }
 }

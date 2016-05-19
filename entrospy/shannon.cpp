@@ -4,6 +4,7 @@
 
 #include "shannon.hpp"
 #include "output.hpp"
+#include "graph.hpp"
 
 #define SHANNON_IDENT(z, n, value) value
 
@@ -140,8 +141,10 @@ public:
 };
 
 void shannon_file(const std::string& path, uint64_t block_size,
-                  const PrintingPolicy& policy, DataFormat format) {
+                  const PrintingPolicy& policy, DataFormat format,
+                  EntropyGraph& graph) {
     std::ifstream file_stream{path, std::ifstream::binary};
+
     if (!block_size) {
         shannon_iterator iter{file_stream, DEFAULT_BLOCK_SIZE, format, false};
         shannon_iterator end{};
@@ -159,9 +162,7 @@ void shannon_file(const std::string& path, uint64_t block_size,
         shannon_iterator end{};
         auto file_size = fs::file_size(path);
         auto addr_width = address_width(policy.addr_format, file_size);
-        if (policy.print_graph) {
-            print_graph_header(path, block_size, file_size, policy);
-        }
+
         for (; iter != end; ++iter) {
             auto score = *iter;
 
@@ -170,7 +171,7 @@ void shannon_file(const std::string& path, uint64_t block_size,
             }
 
             if (policy.print_graph) {
-                print_graph_score(iter.position(), score, policy);
+                graph.insert(path, iter.position(), score);
                 continue;
             }
             print_score(path, iter.position(), addr_width, score, policy);
@@ -178,9 +179,6 @@ void shannon_file(const std::string& path, uint64_t block_size,
                 print_block_bytes(iter.block().begin(), iter.block().end(),
                                   iter.position(), addr_width, policy);
             }
-        }
-        if (policy.print_graph) {
-            print_graph_finalize(policy);
         }
     }
 }

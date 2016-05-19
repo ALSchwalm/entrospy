@@ -31,6 +31,8 @@ inline std::istream& operator>>(std::istream& in, DataFormat& format) {
     return in;
 }
 
+class EntropyGraph;
 void shannon_file(const std::string& path, uint64_t block_size,
-                  const PrintingPolicy& policy, DataFormat format);
+                  const PrintingPolicy& policy, DataFormat format,
+                  EntropyGraph&);
 #endif

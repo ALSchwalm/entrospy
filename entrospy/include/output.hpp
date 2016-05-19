@@ -91,9 +91,4 @@ void print_score(const std::string& path, uint64_t address,
 void print_score(const std::string& path, double score,
                  const PrintingPolicy& policy);
 
-void print_graph_header(const std::string& path, uint64_t block_size,
-                        uint64_t file_size, const PrintingPolicy& policy);
-void print_graph_score(std::streampos position, double score,
-                       const PrintingPolicy& policy);
-void print_graph_finalize(const PrintingPolicy& policy);
 #endif
