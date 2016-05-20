@@ -86,7 +86,7 @@ class shannon_iterator
 
 public:
     shannon_iterator() = default;
-    shannon_iterator(std::ifstream& stream, uint64_t block_size,
+    shannon_iterator(std::istream& stream, uint64_t block_size,
                      DataFormat format, bool clear_stats = true)
         : m_stream{&stream},
           m_format{format},
