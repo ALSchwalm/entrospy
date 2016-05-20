@@ -127,6 +127,13 @@ result of a Root Certificate authority's public key. It seems that `curl` has
 loaded some CA files. A similar technique could be used to located encrypted
 files or keys in a filesystem image, for example.
 
+`entrospy` can also produce a graph representation of file (or files) entropy.
+To do this, pass the `-g` flag. This will cause `entrospy` to output a script
+that can be passed to the `gnuplot` program to create a graph. For example:
+``entrospy -b 1K -g ram_file | gnuplot -p` will create a graph like below:
+
+![entrospy graph demo](resources/demo.png?raw=true "Entrospy Graph Demo")
+
 License
 =======
 
