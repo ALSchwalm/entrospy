@@ -62,8 +62,10 @@ int main(int argc, char** argv) {
          " entropy for each block rather than the total file. The provided"
          " argument will be interpreted as a byte count unless suffixed"
          " with 'K', 'M', or 'G' for kilo, mega, and giga-bytes "
-         "respectively")                              //
-        ("print,p", "Print a hex view of each block") //
+         "respectively") //
+        ("categorize,c",
+         "Show a categorization based on entropy in addition to the score") //
+        ("print,p", "Print a hex view of each block")                       //
         ("addr", po::value<AddressFormat>(&policy.addr_format)
                      ->default_value(AddressFormat::HEX, "hex"),
          "Format to use for printed addresses: 'hex' or 'dec'") //
@@ -119,6 +121,10 @@ int main(int argc, char** argv) {
 
     if (vm.count("graph")) {
         policy.print_graph = true;
+    }
+
+    if (vm.count("categorize")) {
+        policy.categorize = true;
     }
 
     auto title = boost::format("Entropy for %1% (bs=%2%)") %

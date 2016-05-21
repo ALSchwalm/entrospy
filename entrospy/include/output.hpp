@@ -11,6 +11,7 @@ std::istream& operator>>(std::istream& in, AddressFormat& format);
 struct PrintingPolicy {
     bool print_blocks = false;
     bool print_graph = false;
+    bool categorize = false;
     std::pair<double, double> bounds = {std::numeric_limits<double>::lowest(),
                                         std::numeric_limits<double>::max()};
     AddressFormat addr_format = AddressFormat::DECIMAL;
